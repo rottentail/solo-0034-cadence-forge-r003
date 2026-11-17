@@ -72,10 +72,85 @@ func ValidateSheet(s Sheet, sources map[string]Source) error {
 			return Invalid("cue %d has invalid text", i)
 		}
 	}
+	if len(s.Events) > 100 {
+		return Invalid("sheet exceeds 100 events")
+	}
+	seen := map[string]bool{}
+	for i, e := range s.Events {
+		if err := MarkerID(e.ID); err != nil {
+			return Invalid("event %d: %s", i, err)
+		}
+		if seen[e.ID] {
+			return Invalid("event %d duplicates an event id", i)
+		}
+		seen[e.ID] = true
+		source, ok := sources[e.SourceID]
+		if !ok {
+			return Missing("event source", e.SourceID)
+		}
+		if e.AtMS < 0 || e.AtMS > source.Media.DurationMS {
+			return Invalid("event %d is outside source duration", i)
+		}
+	}
+	return nil
+}
+
+// MarkerID constrains event and anchor identifiers so they can be quoted
+// safely inside delivered WebVTT NOTE blocks.
+func MarkerID(id string) error {
+	if len(id) < 1 || len(id) > 64 || strings.Contains(id, "-->") || strings.ContainsAny(id, "\x00\r\n") {
+		return fmt.Errorf("ids must be 1..64 bytes without markup or line breaks")
+	}
+	return nil
+}
+func ValidateVoiceTrack(t VoiceTrack, sources map[string]Source) error {
+	if strings.TrimSpace(t.Name) == "" || len(t.Name) > 160 {
+		return Invalid("voice track name must contain 1..160 bytes")
+	}
+	if len(t.Takes) == 0 || len(t.Takes) > 32 {
+		return Invalid("a voice track requires 1..32 takes")
+	}
+	for i, take := range t.Takes {
+		source, ok := sources[take.SourceID]
+		if !ok {
+			return Missing("voice source", take.SourceID)
+		}
+		if !source.Media.Audio {
+			return Invalid("take %d requires a source with audio", i)
+		}
+		if take.InMS < 0 || take.OutMS <= take.InMS || take.OutMS > source.Media.DurationMS {
+			return Invalid("take %d is outside source duration", i)
+		}
+		if take.OutMS-take.InMS < 100 {
+			return Invalid("take %d is shorter than 100ms", i)
+		}
+		if math.IsNaN(take.GainDB) || math.IsInf(take.GainDB, 0) || take.GainDB < -60 || take.GainDB > 12 {
+			return Invalid("take %d has invalid gain", i)
+		}
+		if len(take.Anchors) > 8 {
+			return Invalid("take %d exceeds 8 anchors", i)
+		}
+		seen := map[string]bool{}
+		for k, a := range take.Anchors {
+			if err := MarkerID(a.ID); err != nil {
+				return Invalid("take %d anchor %d: %s", i, k, err)
+			}
+			if seen[a.ID] {
+				return Invalid("take %d duplicates an anchor id", i)
+			}
+			seen[a.ID] = true
+			if err := MarkerID(a.EventID); err != nil {
+				return Invalid("take %d anchor %d event: %s", i, k, err)
+			}
+			if a.CueMS < take.InMS || a.CueMS > take.OutMS {
+				return Invalid("take %d anchor %d cue is outside the take", i, k)
+			}
+		}
+	}
 	return nil
 }
 func ValidateState(s State) error {
-	if s.Schema != 1 || s.Sources == nil || s.Sheets == nil || s.Recipes == nil || s.Renders == nil {
+	if s.Schema != 1 || s.Sources == nil || s.Sheets == nil || s.Recipes == nil || s.VoiceTracks == nil || s.Renders == nil {
 		return fmt.Errorf("unsupported or incomplete state schema")
 	}
 	for id, source := range s.Sources {
@@ -109,6 +184,19 @@ func ValidateState(s State) error {
 			}
 		}
 	}
+	for id, versions := range s.VoiceTracks {
+		if len(versions) == 0 {
+			return fmt.Errorf("empty voice track history")
+		}
+		for i, v := range versions {
+			if v.ID != id || v.Revision != i+1 {
+				return fmt.Errorf("invalid voice track history")
+			}
+			if err := ValidateVoiceTrack(v, s.Sources); err != nil {
+				return err
+			}
+		}
+	}
 	keys := map[string]bool{}
 	for id, r := range s.Renders {
 		if id != r.ID || keys[r.Key] {
@@ -131,6 +219,20 @@ func ValidateState(s State) error {
 		}
 		if err := ValidateRecipe(r.Recipe); err != nil {
 			return err
+		}
+		if (r.Plan.Voice == nil) != (r.VoiceTrack == nil) {
+			return fmt.Errorf("voice snapshot mismatch")
+		}
+		if r.VoiceTrack != nil {
+			if r.Plan.Voice.TrackID != r.VoiceTrack.ID || r.Plan.Voice.Revision != r.VoiceTrack.Revision {
+				return fmt.Errorf("frozen voice revision mismatch")
+			}
+			if len(r.Plan.Voice.Placements) != len(r.VoiceTrack.Takes) {
+				return fmt.Errorf("voice placement mismatch")
+			}
+			if err := ValidateVoiceTrack(*r.VoiceTrack, r.Sources); err != nil {
+				return err
+			}
 		}
 	}
 	var previous uint64

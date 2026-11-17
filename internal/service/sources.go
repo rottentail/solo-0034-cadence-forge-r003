@@ -59,6 +59,20 @@ func (s *Service) RetireSource(id string) error {
 						return domain.Conflict("source is referenced by cue history")
 					}
 				}
+				for _, event := range sheet.Events {
+					if event.SourceID == id {
+						return domain.Conflict("source is referenced by sheet event history")
+					}
+				}
+			}
+		}
+		for _, versions := range st.VoiceTracks {
+			for _, track := range versions {
+				for _, take := range track.Takes {
+					if take.SourceID == id {
+						return domain.Conflict("source is referenced by voice track history")
+					}
+				}
 			}
 		}
 		for _, r := range st.Renders {

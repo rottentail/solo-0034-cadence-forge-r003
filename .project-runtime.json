@@ -38,6 +38,21 @@
       "timeout_seconds": 120
     },
     {
+      "workflow_id": "voice-version",
+      "command": "python3 scripts/workflow_check.py --workflow voice-version",
+      "timeout_seconds": 120
+    },
+    {
+      "workflow_id": "voice-resolve",
+      "command": "python3 scripts/workflow_check.py --workflow voice-resolve",
+      "timeout_seconds": 120
+    },
+    {
+      "workflow_id": "voice-render",
+      "command": "python3 scripts/workflow_check.py --workflow voice-render",
+      "timeout_seconds": 120
+    },
+    {
       "workflow_id": "loudness",
       "command": "python3 scripts/workflow_check.py --workflow loudness",
       "timeout_seconds": 120

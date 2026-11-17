@@ -43,6 +43,11 @@
       "path": "internal/caption"
     },
     {
+      "id": "voice",
+      "name": "配音锚点解析与取舍报告",
+      "path": "internal/voice"
+    },
+    {
       "id": "encoding",
       "name": "滤镜图与媒体进程执行",
       "path": "internal/encoding"
@@ -158,6 +163,68 @@
         "domain"
       ],
       "verification": "python3 scripts/workflow_check.py --workflow captions"
+    },
+    {
+      "id": "voice-version",
+      "name": "voice-version",
+      "entry": "POST/PUT /forge/v1/voices",
+      "success": "新配音轨修订",
+      "failure": "无声源配音拒绝、过期If-Match返回409",
+      "steps": [
+        "入口解码与领域事实读取",
+        "配音轨引用有效且历史修订不被覆盖",
+        "新配音轨修订"
+      ],
+      "module_ids": [
+        "http",
+        "application",
+        "domain",
+        "journal"
+      ],
+      "verification": "python3 scripts/workflow_check.py --workflow voice-version"
+    },
+    {
+      "id": "voice-resolve",
+      "name": "voice-resolve",
+      "entry": "GET /forge/v1/sheets/{id}/preview?voice_id={id}",
+      "success": "配音区间、锚点取舍与说明",
+      "failure": "缺失画面事件标记lost并说明而非静默",
+      "steps": [
+        "入口解码与领域事实读取",
+        "锚点跟随画面事件且配音不拉伸不钉死",
+        "配音区间、锚点取舍与说明"
+      ],
+      "module_ids": [
+        "http",
+        "application",
+        "timeline",
+        "voice",
+        "domain",
+        "journal"
+      ],
+      "verification": "python3 scripts/workflow_check.py --workflow voice-resolve"
+    },
+    {
+      "id": "voice-render",
+      "name": "voice-render",
+      "entry": "POST /forge/v1/renders 含 voice_track_id 与 voice_revision",
+      "success": "混音成片及冻结配音关系说明",
+      "failure": "配音修订缺失404、重试不混入后来编辑",
+      "steps": [
+        "入口解码与领域事实读取",
+        "剪辑与配音修订共同冻结且取舍写入交付说明",
+        "混音成片及冻结配音关系说明"
+      ],
+      "module_ids": [
+        "http",
+        "application",
+        "voice",
+        "encoding",
+        "inspection",
+        "objects",
+        "journal"
+      ],
+      "verification": "python3 scripts/workflow_check.py --workflow voice-render"
     },
     {
       "id": "loudness",
@@ -445,7 +512,7 @@
     "evidence": {
       "concurrency": "internal/service/worker.go:claim, completeLocked",
       "recovery_rollback": "internal/journal/recovery.go:Recover",
-      "time_semantics": "internal/timeline/plan.go:Build; internal/caption/map.go:Map",
+      "time_semantics": "internal/timeline/plan.go:Build; internal/caption/map.go:Map; internal/voice/resolve.go:Resolve",
       "idempotency": "internal/service/submit.go:Submit",
       "snapshot_consistency": "internal/service/submit.go:Submit; internal/journal/store.go:Update"
     }

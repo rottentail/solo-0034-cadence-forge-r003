@@ -38,6 +38,11 @@ func Open(root string) (*Store, error) {
 	} else if os.IsNotExist(err) {
 		err = nil
 	}
+	if err == nil && s.state.VoiceTracks == nil {
+		// Voice tracks were added after schema 1 shipped; an absent map in an
+		// older state file means no voice history, not a schema change.
+		s.state.VoiceTracks = map[string][]domain.VoiceTrack{}
+	}
 	if err == nil {
 		err = domain.ValidateState(s.state)
 	}

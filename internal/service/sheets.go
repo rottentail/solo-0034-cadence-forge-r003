@@ -4,6 +4,7 @@ import (
 	"cadenceforge/internal/caption"
 	"cadenceforge/internal/domain"
 	"cadenceforge/internal/timeline"
+	"cadenceforge/internal/voice"
 	"time"
 )
 
@@ -38,7 +39,7 @@ func (s *Service) SaveSheet(id string, expected int, input domain.Sheet) (domain
 	})
 	return out, err
 }
-func (s *Service) Preview(sheetID, recipeID string) (domain.Plan, error) {
+func (s *Service) Preview(sheetID, recipeID, voiceID string) (domain.Plan, error) {
 	st, err := s.Store.Snapshot()
 	if err != nil {
 		return domain.Plan{}, err
@@ -57,6 +58,18 @@ func (s *Service) Preview(sheetID, recipeID string) (domain.Plan, error) {
 	if err != nil {
 		return plan, err
 	}
+	if voiceID != "" {
+		tracks := st.VoiceTracks[voiceID]
+		if len(tracks) == 0 {
+			return domain.Plan{}, domain.Missing("voice track", voiceID)
+		}
+		resolution := voice.Resolve(plan, tracks[len(tracks)-1])
+		plan.DurationMS = resolution.DurationMS
+		plan.Voice = &resolution
+	}
 	plan.VTT = caption.VTT(caption.Map(sheet, plan))
+	if plan.Voice != nil {
+		plan.VTT = voice.WithNotes(plan.VTT, *plan.Voice)
+	}
 	return plan, nil
 }

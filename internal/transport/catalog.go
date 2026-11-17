@@ -90,8 +90,27 @@ func (a API) recipe(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("ETag", strconv.Itoa(v.Revision))
 	write(w, 201, v)
 }
+func (a API) voice(w http.ResponseWriter, r *http.Request) {
+	var input domain.VoiceTrack
+	if err := decode(w, r, &input); err != nil {
+		failure(w, err)
+		return
+	}
+	rev, err := expected(r)
+	if err != nil {
+		failure(w, err)
+		return
+	}
+	v, err := a.Service.SaveVoiceTrack(r.PathValue("id"), rev, input)
+	if err != nil {
+		failure(w, err)
+		return
+	}
+	w.Header().Set("ETag", strconv.Itoa(v.Revision))
+	write(w, 201, v)
+}
 func (a API) preview(w http.ResponseWriter, r *http.Request) {
-	v, err := a.Service.Preview(r.PathValue("id"), r.URL.Query().Get("recipe_id"))
+	v, err := a.Service.Preview(r.PathValue("id"), r.URL.Query().Get("recipe_id"), r.URL.Query().Get("voice_id"))
 	if err != nil {
 		failure(w, err)
 		return

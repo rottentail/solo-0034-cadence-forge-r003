@@ -24,5 +24,16 @@ func Build(sheet domain.Sheet, recipe domain.Recipe, sources map[string]domain.S
 		plan.Placements = append(plan.Placements, domain.Placement{SourceID: source.ID, SourceInMS: span.InMS, SourceOutMS: span.OutMS, OutputInMS: plan.DurationMS, OutputOutMS: plan.DurationMS + duration, GainDB: span.GainDB})
 		plan.DurationMS += duration
 	}
+	for _, event := range sheet.Events {
+		placement := domain.EventPlacement{ID: event.ID, SourceID: event.SourceID, SourceAtMS: event.AtMS}
+		for _, p := range plan.Placements {
+			if p.SourceID == event.SourceID && event.AtMS >= p.SourceInMS && event.AtMS < p.SourceOutMS {
+				placement.Covered = true
+				placement.OutputMS = p.OutputInMS + event.AtMS - p.SourceInMS
+				break
+			}
+		}
+		plan.Events = append(plan.Events, placement)
+	}
 	return plan, nil
 }
